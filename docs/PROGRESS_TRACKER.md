@@ -23,7 +23,7 @@
 | Save file reference doc | Done — FARMSIM_SAVE_REFERENCE.md complete against a real save (settings, finances, fields, fleet, buildings, mods, world/terrain, mod-generated files) |
 | Build | In progress — Phase 1 scaffolded (Vite + React + TS + Tailwind, routing, theme tokens, hub + tool page stubs) |
 
-## Phase 1 — MVP (scaffold done, feature logic 0/14 subtasks)
+## Phase 1 — MVP (complete — upload, report and Farm Manager all running on real save data)
 
 ### Scaffold (done this session)
 - [x] Vite + React + TypeScript project created
@@ -34,27 +34,70 @@
 - [x] Farm Manager page stub — grid + split-view editor shell
 - [x] Dev server confirmed running on localhost
 
-### Feature: Save File Upload (0/4)
-- [ ] Multi-file drag-and-drop / picker, no zip required
-- [ ] Per-file accepted confirmation as it lands
-- [ ] Multi-farm detection + picker (single farm vs. all farms)
-- [ ] Unrecognized mod content tagging (badge, never an error) — confirmed against real mod files in FARMSIM_SAVE_REFERENCE.md
+### Feature: Save File Upload (4/4)
+- [x] Multi-file drag-and-drop / picker, no zip required
+- [x] Per-file accepted confirmation as it lands — classified instantly by filename, upgraded to the real result once parsed
+- [x] Multi-farm detection + picker (farm buttons appear only when the save has more than one farm)
+- [x] Unrecognized mod content tagging — three states: **Accepted** (parsed), **Passed through** (world/terrain/economy), **Mod content** (root tag shown, never an error)
 
-### Feature: Report Generator (0/4)
-- [ ] Parse uploaded XML into a normalized data model (finances, fleet, fields, production) — all four sourced from real save data, see reference doc
-- [ ] Scripted rules engine — ports the manual chat-audit logic
-- [ ] Report view (read-only)
-- [ ] Mods list export (.txt) — title, version, internal name per mod
+### Feature: Report Generator (4/4)
+- [x] Parse uploaded XML into a normalized data model — `src/lib/saveModel.ts` (types) + `src/lib/parseSave.ts` (tolerant DOMParser readers for careerSavegame, farms, farmland, fields, vehicles, placeables, environment)
+- [x] Scripted rules engine — `src/lib/insights.ts`, every rule returns a severity, a headline and a plain-English reason
+- [x] Report view (read-only) with per-entity drill-down
+- [x] Mods list export (.txt) — title, version, internal name per mod
 
-### Feature: Farm Manager (0/5)
-- [ ] Status grid view of fields, color-coded (green / amber / rust per the theme spec)
-- [ ] Click-tile edit panel
-- [ ] Split-view editor — inputs left, live XML preview right, 30s change highlight
-- [ ] Safe/risky edit warnings — first-pass classification done in FARMSIM_SAVE_REFERENCE.md, needs in-game verification before shipping
-- [ ] Export — Downloads-folder download (universal) + File System Access direct write-back (Chrome-only, feature-detected)
+#### Breakdown depth (what the report actually shows)
+- [x] **Dashboard layout** — tabbed sections (Overview / Finances / Fleet / Fields / Production / Mods & files) instead of one long scroll; each tab carries a badge counting what needs work
+- [x] **Overview** — four clickable KPI cards (cash, fleet value, fields, lines running) over the priorities panel
+- [x] **Priorities panel** — the six highest-value actions across the whole farm, worst first
+- [x] **Save files hidden by default** — uploader collapses to a one-line summary once a save is loaded; the file list lives behind a disclosure in the Mods & files tab
+- [x] **Finances** — money, loan, net worth (cash + fleet − loan), playtime, day, land parcels; totals by category; **expandable day-by-day rows** splitting income vs. costs line by line
+- [x] **Per vehicle** — value, age, operating hours, condition, wear, what it is hitched to, every fuel/cargo tank as a meter, plus advice (repair due, low fuel, cargo still aboard, barely used capital, high hours)
+- [x] **Per field** — crop, planned next crop, growth stage, ground type, spray type, area; weeds / fertiliser / lime / plough / stones / water as meters; plus advice (withered, ready to harvest, weeds, no fertiliser, lime due, not ploughed, stones, rotation penalty)
+- [x] **Per production line** — per building: storage meters, each line's active state with its own input and output meters, plus advice (nothing running, lines idle, output backing up, input starved)
+- [x] **Rollups** — fleet value by category, idle capital total, repair backlog, fields needing work, active vs. total lines
 
-### Feature: Privacy Note (0/1)
-- [ ] Static privacy disclosure in the UI
+#### Next on the report (before the map)
+- [ ] Profit per field — join `economy.xml` crop prices to field area and growth to rank fields by what they actually earn
+- [ ] Cost per vehicle — attribute `vehicleRunningCost`, fuel and repair spend back to individual machines
+- [ ] Trend lines — day-over-day net, not just totals, so a decline is visible before it hurts
+- [ ] Production chain view — which building feeds which, and where the chain is starved
+- [ ] Report export (.txt / print stylesheet) alongside the mods list
+- [ ] Verify the tolerant parsers against a second real save (multi-farm, different map, different mods)
+
+### Feature: Farm Manager (5/5)
+- [x] Status grid view of fields, color-coded — reuses the report's field severity, so both tools always agree
+- [x] Click-tile edit panel
+- [x] Split-view editor — inputs left, live XML preview right, 30s change highlight; the panel also shows the report's advice for the field *as edited*
+- [x] Safe/risky edit warnings — safe edits are open; crop and ground type are gated behind an explicit "allow risky edits" toggle with the density-map caveat spelled out
+- [x] Export — download (universal) + File System Access direct write-back (feature-detected, Chrome-only); only the files you actually changed are rewritten
+- [x] Ported onto the normalized model — Farm Manager edits the same data the report reads
+- [x] Tabbed dashboard (Farm / Fields / Fleet / Production / Export) with a pending-change count on the Export tab
+
+#### What can be edited
+| Area | Editable | Notes |
+|---|---|---|
+| Farm | name, money, loan | plus "clear the loan" and "pay loan from cash" shortcuts |
+| Fields | growth stage, weeds, fertiliser, lime, plough, stones, water, planned crop | sliders run in the save's own level units |
+| Fields (risky) | crop, ground type | gated behind the risky-edit toggle |
+| Fields (bulk) | clear weeds, max lime, max fertiliser, plough, clear stones | applied across every field at once |
+| Fleet | value, condition (repair), dirt (clean), every tank and cargo level | plus repair all / clean all / fill all / empty all trailers |
+| Production | each line on or off, storage levels per fill type | production speed curves deliberately not exposed |
+
+#### Export guarantees (verified against a real FS25 save)
+- Only `farms.xml`, `fields.xml`, `vehicles.xml` and `placeables.xml` are ever rewritten — and only the ones you actually changed
+- Within those, only the attributes you changed are touched. Verified by diffing a 68-field export against the original: **only `limeLevel` differed across the whole file**, with `lastGrowthState`, `rollerLevel`, `stubbleShredLevel` and attribute order all preserved
+- Values the tool normalises for display (`fruitType="UNKNOWN"`, `plannedFruit="FALLOW"`) round-trip untouched when unedited
+- Fruit-type tokens keep the file's own casing convention
+
+#### Still to verify in game
+- [ ] Load an edited save in FS25 and confirm the safe/risky classification from FARMSIM_SAVE_REFERENCE.md holds
+- [ ] Confirm the crop / ground-type density-map caveat behaves the way the warning describes
+- [ ] Confirm that clearing every `dirtNode` is how the game expects a washed machine to look
+- [ ] Second save (multi-farm, different map) to confirm the level scales and `groundType` tokens are universal
+
+### Feature: Privacy Note (1/1)
+- [x] Static privacy disclosure in the UI (Report page footer + site footer)
 
 ## Phase 2 — Later
 - Real geographic map (upgrades the grid)

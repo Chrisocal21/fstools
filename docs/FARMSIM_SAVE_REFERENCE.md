@@ -77,6 +77,55 @@ This is what Farm Manager's warning system reads from. Marked "first pass" — c
 
 ---
 
+## Confirmed Formats (read straight from the sample save, not inferred)
+
+These were verified attribute-by-attribute while wiring up the parser. Several
+contradict the earlier assumptions in this doc, so treat this section as the
+authority.
+
+**Field levels are small integers, not percentages.** In the sample save:
+
+| Attribute | Values present | Meaning |
+|---|---|---|
+| `weedState` | 0–1 | 0 = clean |
+| `sprayLevel` | 0–2 | fertilisation stages, higher is better |
+| `limeLevel` | 0–3 | 0 = lime is due |
+| `plowLevel` | 0–1 | 0 = carrying the ploughing penalty |
+| `rollerLevel`, `stubbleShredLevel` | 0–1 | not currently surfaced |
+| `stoneLevel`, `waterLevel` | 0 | present but unused on this map |
+| `growthState` | 0–10 | per-crop stage counter, **no fixed maximum** |
+
+Because the maximum varies by save and mod set, the tool derives each scale from
+the highest value the save actually uses rather than assuming a range.
+
+**Readiness comes from `groundType`, not `growthState`.** Values seen:
+`NONE`, `CULTIVATED`, `PLOWED`, `SOWN`, `RIDGE_SOWN`, `PLANTED`,
+`HARVEST_READY`, `HARVEST_READY_OTHER`. A field is harvestable when
+`groundType` starts with `HARVEST_READY`.
+
+**Sentinel values:** `fruitType="UNKNOWN"` means bare ground and
+`plannedFruit="FALLOW"` means nothing planned. `sprayType="NONE"` likewise.
+
+**Vehicles:**
+- `operatingTime` is **seconds** — divide by 3600 for hours. (Cross-checked: the sample's `operatingTime` of 68,702 s matches its `playTime` of 1,142 minutes.)
+- `price` and `age` are on the `<vehicle>` element; there is no `damage` attribute there
+- Damage lives on a nested `<wearable damage="0.001577"/>`
+- Dirt lives on `<washable><dirtNode amount="…"/></washable>` — **one node per painted part**, so a clean-up has to set them all
+- Tanks are `<fillUnit><unit index fillType fillLevel/></fillUnit>` with **no `capacity`** — capacity is in the vehicle's mod/base XML, not the save, so fill percentages can't be computed from a save alone
+- `propertyState` is `OWNED` or `LEASED`
+
+**Production points:**
+- Lines are `<production id="planks" isEnabled="true"/>` — the attribute is `isEnabled`
+- Storage is `<storage farmId="1"><node fillType fillLevel/></storage>`, again with no capacity
+- Preplaced buildings have **no `filename`** — the type name has to come from the `uniqueId` (`preplaced_<type>_<hash>`)
+- Preplaced buildings sit on `farmId="0"`; the owning farm is on the nested `<storage farmId="…">`
+
+**careerSavegame.xml:** `savegameName`, `mapTitle`, `mapId` and `playTime` are nested under `<settings>`, not on the root. `playTime` is in minutes.
+
+**farms.xml:** matches the earlier description — `<finances><stats day="N">` with one child element per line item, and `<statistics>` with lifetime totals.
+
+---
+
 ## Status
 
 Reference doc complete against this save. Fields, finances, fleet, buildings, and mod list all sourced from real data — nothing left inferred from the feature list alone. Next real test is a second save (ideally multi-farm, different map) to confirm what's universal versus specific to this one save.
