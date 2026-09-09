@@ -7,6 +7,7 @@ import {
   InsightList,
   MeterBar,
   Panel,
+  ProductionChainView,
   SeverityTag,
   StatGrid,
   TrendChart,
@@ -608,6 +609,17 @@ export default function Report() {
             title="Production"
             aside={`${report.productionStats.activeLines}/${report.productionStats.totalLines} lines running`}
           >
+            <div className="mb-6 border-b border-tan pb-5">
+              <Panel title="Production chain — what feeds what">
+                <ProductionChainView links={report.productionChains} />
+              </Panel>
+              {report.productionChainInsights.length > 0 && (
+                <div className="mt-4">
+                  <InsightList insights={report.productionChainInsights} />
+                </div>
+              )}
+            </div>
+
             <div>
               {report.production.map((point) => {
                 const insights = productionInsights(point)

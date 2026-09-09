@@ -3,9 +3,11 @@ import type { ReactNode } from 'react'
 import {
   formatMoney,
   formatPercent,
+  type ChainStatus,
   type FillSlot,
   type FinanceDay,
   type Insight,
+  type ProductionChainLink,
   type Severity,
 } from '../lib/saveModel'
 
@@ -237,6 +239,51 @@ export function TrendChart({ days }: { days: FinanceDay[] }) {
         <span>Day {chronological[chronological.length - 1].day} (most recent)</span>
       </div>
     </div>
+  )
+}
+
+const CHAIN_STATUS_STYLE: Record<ChainStatus, { text: string; label: string }> = {
+  starved: { text: 'text-status-risky', label: 'Starved' },
+  unused: { text: 'text-status-attention', label: 'Backing up' },
+  idle: { text: 'text-ink/40', label: 'Idle' },
+  flowing: { text: 'text-status-safe', label: 'Flowing' },
+}
+
+/**
+ * Which building feeds which. Only fill types with a producer and a
+ * consumer on the farm show up here — an output nothing on the farm uses is
+ * a sold end product, not a chain, and is left out of this view entirely.
+ */
+export function ProductionChainView({ links }: { links: ProductionChainLink[] }) {
+  if (links.length === 0) {
+    return (
+      <p className="text-sm text-ink/50">
+        No internal chains — nothing this farm produces is also consumed by another line here.
+      </p>
+    )
+  }
+  return (
+    <ul className="divide-y divide-tan">
+      {links.map((link) => {
+        const style = CHAIN_STATUS_STYLE[link.status]
+        const producerNames = [...new Set(link.producers.map((p) => p.pointName))]
+        const consumerNames = [...new Set(link.consumers.map((c) => `${c.pointName} · ${c.lineName}`))]
+        return (
+          <li key={link.fillType} className="flex flex-wrap items-center gap-3 py-3 text-sm">
+            <span className={`shrink-0 text-xs font-medium uppercase tracking-wide ${style.text}`}>
+              {style.label}
+            </span>
+            <span className="min-w-0 flex-1 text-ink/80">
+              <span className="text-ink">{producerNames.join(', ')}</span>
+              <span className="mx-2 text-ink/40">&rarr;</span>
+              <span className="font-medium text-ink">{link.fillType}</span>
+              <span className="mx-2 text-ink/40">&rarr;</span>
+              <span className="text-ink">{consumerNames.join(', ')}</span>
+            </span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 

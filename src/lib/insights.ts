@@ -10,9 +10,12 @@ import {
   type CropValueEntry,
   type Farm,
   type Field,
+  type ChainStatus,
   type FillSlot,
   type FinanceDay,
   type Insight,
+  type ProductionChainLink,
+  type ProductionChainNode,
   type ProductionPoint,
   type SaveData,
   type Severity,
@@ -540,6 +543,102 @@ export function productionRollup(points: ProductionPoint[]): ProductionRollup {
   return { count: points.length, activeLines, totalLines, insights }
 }
 
+// --- production chain ---------------------------------------------------
+
+const CHAIN_STATUS_ORDER: Record<ChainStatus, number> = {
+  starved: 0,
+  unused: 1,
+  idle: 2,
+  flowing: 3,
+}
+
+/**
+ * Links production lines within a farm by shared fill types — a line's
+ * output feeding another line's input. Only fill types with a producer AND
+ * a consumer on this farm are chains; an output nothing on the farm consumes
+ * is a sold end product, not a broken link, so it's left out.
+ */
+export function productionChains(points: ProductionPoint[]): ProductionChainLink[] {
+  const producersByType = new Map<string, ProductionChainNode[]>()
+  const consumersByType = new Map<string, ProductionChainNode[]>()
+
+  for (const point of points) {
+    for (const line of point.lines) {
+      const toNode = (slot: FillSlot): ProductionChainNode => ({
+        pointId: point.uniqueId,
+        pointName: point.name,
+        lineId: line.id,
+        lineName: line.name,
+        active: line.active,
+        fillLevel: slot.fillLevel,
+        ratio: slot.ratio,
+      })
+      for (const slot of line.outputs) {
+        const list = producersByType.get(slot.fillType) ?? []
+        list.push(toNode(slot))
+        producersByType.set(slot.fillType, list)
+      }
+      for (const slot of line.inputs) {
+        const list = consumersByType.get(slot.fillType) ?? []
+        list.push(toNode(slot))
+        consumersByType.set(slot.fillType, list)
+      }
+    }
+  }
+
+  const fillTypes = new Set([...producersByType.keys(), ...consumersByType.keys()])
+  const links: ProductionChainLink[] = []
+
+  for (const fillType of fillTypes) {
+    const producers = producersByType.get(fillType) ?? []
+    const consumers = consumersByType.get(fillType) ?? []
+    if (producers.length === 0 || consumers.length === 0) continue
+
+    const activeProducers = producers.filter((p) => p.active)
+    const activeConsumers = consumers.filter((c) => c.active)
+    const producerHasStock = producers.some((p) => p.fillLevel > 0)
+
+    let status: ChainStatus
+    if (activeConsumers.length > 0 && activeProducers.length === 0 && !producerHasStock) {
+      status = 'starved'
+    } else if (activeProducers.length > 0 && activeConsumers.length === 0) {
+      status = 'unused'
+    } else if (activeProducers.length === 0 && activeConsumers.length === 0) {
+      status = 'idle'
+    } else {
+      status = 'flowing'
+    }
+
+    links.push({ fillType, producers, consumers, status })
+  }
+
+  return links.sort((a, b) => CHAIN_STATUS_ORDER[a.status] - CHAIN_STATUS_ORDER[b.status])
+}
+
+export function productionChainInsights(links: ProductionChainLink[]): Insight[] {
+  const out: Insight[] = []
+  for (const link of links) {
+    if (link.status === 'starved') {
+      const consumerNames = [...new Set(link.consumers.filter((c) => c.active).map((c) => c.lineName))]
+      const producerNames = [...new Set(link.producers.map((p) => p.pointName))]
+      out.push({
+        severity: 'risky',
+        title: `${link.fillType} chain is starved`,
+        detail: `${consumerNames.join(', ')} need${consumerNames.length === 1 ? 's' : ''} ${link.fillType.toLowerCase()}, but ${producerNames.join(', ')} ${producerNames.length === 1 ? 'is' : 'are'} not making any right now. Switch the producing line back on or the consumer stalls next.`,
+      })
+    } else if (link.status === 'unused') {
+      const producerNames = [...new Set(link.producers.filter((p) => p.active).map((p) => p.pointName))]
+      const consumerNames = [...new Set(link.consumers.map((c) => c.lineName))]
+      out.push({
+        severity: 'attention',
+        title: `${link.fillType} has nowhere to go`,
+        detail: `${producerNames.join(', ')} ${producerNames.length === 1 ? 'is' : 'are'} making ${link.fillType.toLowerCase()}, but ${consumerNames.join(', ')} ${consumerNames.length === 1 ? 'is' : 'are'} switched off. Turn the consumer on or this output is going to waste.`,
+      })
+    }
+  }
+  return out
+}
+
 // --- assembled report --------------------------------------------------
 
 export type Report = {
@@ -553,6 +652,8 @@ export type Report = {
   fleet: FleetRollup
   fieldStats: FieldRollup
   productionStats: ProductionRollup
+  productionChains: ProductionChainLink[]
+  productionChainInsights: Insight[]
   /** Highest-value actions across every section, worst first. */
   priorities: Insight[]
 }
@@ -573,12 +674,15 @@ export function buildReport(save: SaveData, farmId: number): Report | null {
   const fleet = fleetRollup(vehicles)
   const fieldStats = fieldRollup(fields, scales, irrigation, save.cropPrices)
   const productionStats = productionRollup(production)
+  const chains = productionChains(production)
+  const chainInsights = productionChainInsights(chains)
 
   const priorities = [
     ...finance.insights,
     ...fieldStats.insights,
     ...fleet.insights,
     ...productionStats.insights,
+    ...chainInsights,
   ]
     .filter((i) => i.severity !== 'good')
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
@@ -595,6 +699,8 @@ export function buildReport(save: SaveData, farmId: number): Report | null {
     fleet,
     fieldStats,
     productionStats,
+    productionChains: chains,
+    productionChainInsights: chainInsights,
     priorities,
   }
 }

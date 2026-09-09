@@ -79,6 +79,31 @@ export type ProductionPoint = {
   isMod: boolean
 }
 
+export type ProductionChainNode = {
+  pointId: string
+  pointName: string
+  lineId: string
+  lineName: string
+  active: boolean
+  fillLevel: number
+  ratio: number | null
+}
+
+export type ChainStatus = 'flowing' | 'starved' | 'unused' | 'idle'
+
+/**
+ * One fill type that flows between production lines within the same farm —
+ * e.g. Feed Mixer output feeding a Cow Barn input. Only fill types with both
+ * a producer and a consumer on this farm count as a chain; a line's output
+ * that nothing on the farm consumes is an end product, not a broken chain.
+ */
+export type ProductionChainLink = {
+  fillType: string
+  producers: ProductionChainNode[]
+  consumers: ProductionChainNode[]
+  status: ChainStatus
+}
+
 export type FinanceDay = {
   /** Index in the save's rolling window — 0 is the most recent day. */
   day: number

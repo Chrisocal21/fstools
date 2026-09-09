@@ -133,6 +133,7 @@ individual `uniqueId` from save data. `drivable` does carry `odometerMilage`
 
 **Production points:**
 - Lines are `<production id="planks" isEnabled="true"/>` — the attribute is `isEnabled`
+- Confirmed against the real sample save (202 `<production>` elements across ~130 distinct ids, vanilla and modded alike): every one carries **only** `id` and `isEnabled`, never a per-line input/output buffer level. The report's chain view (`productionChains` in insights.ts) reads those buffers when present and degrades to an honest "no internal chains" empty state when they aren't — which is effectively always, going by this save. Building-level `storage` (below) is the only real per-fill-type level the save carries, and it mixes raw material and finished-product fill types in one flat list with no way to tell which is which without recipe knowledge the save doesn't provide — so it can't be used to reconstruct chain topology either.
 - Storage is `<storage farmId="1"><node fillType fillLevel/></storage>`, again with no capacity
 - Preplaced buildings have **no `filename`** — the type name has to come from the `uniqueId` (`preplaced_<type>_<hash>`)
 - Preplaced buildings sit on `farmId="0"`; the owning farm is on the nested `<storage farmId="…">`
