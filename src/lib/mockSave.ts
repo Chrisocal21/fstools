@@ -122,9 +122,21 @@ export const MOCK_SAVE: SaveData = {
     { name: 'vehicles.xml', status: 'parsed', rootTag: 'vehicles', note: 'Read into your report', bytes: 240_100 },
     { name: 'placeables.xml', status: 'parsed', rootTag: 'placeables', note: 'Read into your report', bytes: 512_600 },
     { name: 'farmland.xml', status: 'parsed', rootTag: 'farmlands', note: 'Read into your report', bytes: 9_200 },
-    { name: 'economy.xml', status: 'passthrough', rootTag: null, note: 'Carried through untouched', bytes: 1_840_000 },
+    { name: 'economy.xml', status: 'parsed', rootTag: 'economy', note: 'Read into your report', bytes: 1_840_000 },
     { name: 'realSiloData.xml', status: 'unrecognized', rootTag: 'realSiloData', note: 'Mod content â€” kept as-is', bytes: 3_100 },
     { name: 'FS25_ContractBoost.xml', status: 'unrecognized', rootTag: 'contractBoost', note: 'Mod content â€” kept as-is', bytes: 1_450 },
   ],
   ownedFarmlandByFarm: { 1: 14 },
+  // Representative of a real economy.xml's yearly average per fill type.
+  cropPrices: {
+    Wheat: 507,
+    Barley: 472,
+    Canola: 919,
+    Maize: 572,
+    Soybean: 1172,
+    Potato: 356,
+    'Sugar Beet': 255,
+    Sunflower: 1015,
+    Grass: 44,
+  },
 }

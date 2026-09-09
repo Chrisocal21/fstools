@@ -25,7 +25,7 @@ Rule for the parser: if a file's root tag matches the known-core list below, par
 | `farmland.xml` | Every farmland parcel `id` mapped to the `farmId` that owns it (`farmId="0"` means unowned) | Report: ownership context, Farm Manager: which land is whose |
 | `fields.xml` | Per field `id`: `fruitType`, `growthState`, `weedState`, `groundType`, `sprayType`/`sprayLevel`, `limeLevel`, `plowLevel`, `waterLevel`, `stoneLevel`, `plannedFruit` | Report: Fields section, Farm Manager: grid + click-to-edit |
 | `vehicles.xml` | Every vehicle/implement: `filename` (identifies make/model), `uniqueId`, `price`, `age`, `farmId` (owner — filter to the farm being reviewed), `operatingTime`, `fillUnit` (current cargo), `configuration` (color/trim options), `attacherJoints` (what's hitched to what) | Report: Fleet section |
-| `economy.xml` | Every crop/product's price history across the twelve seasonal periods (large file — thousands of lines, one block per fill type) | Report: market/production context |
+| `economy.xml` | Every crop/product's price history across the twelve seasonal periods (large file — thousands of lines, one block per fill type) | Report: Fields section (value ranking) |
 | `placeables.xml` | Every building: `uniqueId`, `price`, `farmId` (owner), and nested `productionPoint` (active productions, storage fill levels) or `sellingStation` (price curves) — large file, structure is consistent per placeable | Report: Production section, Farm Manager: building list |
 | `missions.xml` | Active contracts (cultivate/harvest/plow/stone-pick), which field, reward, status | Stretch — not core v1, parked as a future report line |
 | `environment.xml` | Current day, time, weather forecast | Minor — "Day X" context in the report header, not a core section |
@@ -106,6 +106,23 @@ the highest value the save actually uses rather than assuming a range.
 **Sentinel values:** `fruitType="UNKNOWN"` means bare ground and
 `plannedFruit="FALLOW"` means nothing planned. `sprayType="NONE"` likewise.
 
+**Field area is not in `fields.xml`.** Confirmed against the real sample: no
+field element carries `areaHa`, `area`, or anything else area-shaped, and
+`farmland.xml` only maps parcel `id` to owning `farmId` — no size there
+either. A field's hectare size is fixed by the map, not written into the
+save, so it can't be read from save files at all; it would have to come from
+the map's own data when that becomes relevant (the Phase 2 real map). The
+model's `areaHa: number | null` already treats this as commonly absent.
+
+**Vehicles carry no cost history.** Confirmed against the real sample: no
+`<vehicle>` element or nested child (checked every one — `washable`,
+`wearable`, `fillUnit`, `drivable`, `aiJobVehicle`, `attacherJoints`, mod
+blocks) records fuel spent, repair spent, or running cost for that specific
+machine. `farms.xml`'s `vehicleRunningCost` and fuel-purchase line items are
+farm-wide daily totals only — there is no way to attribute them back to an
+individual `uniqueId` from save data. `drivable` does carry `odometerMilage`
+(distance, not cost) alongside `operatingTime`.
+
 **Vehicles:**
 - `operatingTime` is **seconds** — divide by 3600 for hours. (Cross-checked: the sample's `operatingTime` of 68,702 s matches its `playTime` of 1,142 minutes.)
 - `price` and `age` are on the `<vehicle>` element; there is no `damage` attribute there
@@ -121,6 +138,8 @@ the highest value the save actually uses rather than assuming a range.
 - Preplaced buildings sit on `farmId="0"`; the owning farm is on the nested `<storage farmId="…">`
 
 **careerSavegame.xml:** `savegameName`, `mapTitle`, `mapId` and `playTime` are nested under `<settings>`, not on the root. `playTime` is in minutes.
+
+**economy.xml:** `<economy><fillTypes><fillType fillType="WHEAT"><history><period period="EARLY_SPRING">525</period>...</history></fillType></fillTypes></economy>` — one `<fillType>` per fill type (crop and product tokens alike, e.g. `WHEAT`, `MILK`, `PLANKS`), each with exactly twelve `<period>` children (`EARLY_SPRING` through `LATE_WINTER`) giving that season's price. A `fillType="UNKNOWN"` entry exists with no `<history>` — skip it. Some entries carry a `totalAmount` attribute (seen on `CANOLA`, `MAIZE`, `BEETROOT`, `LETTUCE`, `PLANKS`, `BREAD`, `GRASS_WINDROW`) — purpose unconfirmed, not used. There is **no "current price" or current-period marker anywhere in the file** — the save doesn't record which of the twelve periods is active, so the report averages the year rather than guessing a season. A couple of fill types (observed: `TEA_WINTERFRUITS`) carry a negative glitch value in one or two periods — the parser drops non-positive values before averaging. Units are unconfirmed (likely $ per 1000L, matching FS's in-game price display convention) — treated only as a relative ranking signal, never surfaced as a dollar figure.
 
 **farms.xml:** matches the earlier description — `<finances><stats day="N">` with one child element per line item, and `<statistics>` with lifetime totals.
 

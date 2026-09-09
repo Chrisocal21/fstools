@@ -9,6 +9,7 @@ import {
   Panel,
   SeverityTag,
   StatGrid,
+  TrendChart,
 } from '../components/ReportPieces'
 import {
   buildReport,
@@ -300,6 +301,15 @@ export default function Report() {
               ]}
             />
 
+            {save.finances.length > 1 && (
+              <div className="mt-6">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink/50">
+                  Net per day
+                </p>
+                <TrendChart days={save.finances} />
+              </div>
+            )}
+
             {report.finance.byCategory.length > 0 && (
               <div className="mt-6">
                 <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink/50">
@@ -492,6 +502,31 @@ export default function Report() {
               report.fieldStats.areaHa ? ` · ${report.fieldStats.areaHa.toFixed(1)} ha` : ''
             } · ${report.fieldStats.needsAttention} needing work`}
           >
+            {report.fieldStats.topValue.length > 0 && (
+              <div className="mb-6 border-b border-tan pb-6">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink/50">
+                  Most valuable crops on this farm
+                </p>
+                <div className="space-y-2.5">
+                  {report.fieldStats.topValue.map((entry) => (
+                    <MeterBar
+                      key={entry.fruitType}
+                      label={`${entry.fruitType} — ${entry.fieldIds.length} field${
+                        entry.fieldIds.length === 1 ? '' : 's'
+                      }${entry.areaHa ? ` · ${entry.areaHa.toFixed(1)} ha` : ''}`}
+                      ratio={entry.price / report.fieldStats.topValue[0].price}
+                      caption={Math.round(entry.price).toLocaleString()}
+                    />
+                  ))}
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-ink/50">
+                  Ranked by each crop's average price across the save's twelve
+                  seasonal periods — not the current price, and not adjusted
+                  for yield or area, which most saves don't record per field.
+                </p>
+              </div>
+            )}
+
             <div>
               {report.fields.map((field) => {
                 const insights = fieldInsights(field, report.scales, {

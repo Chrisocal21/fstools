@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Real FS25 savegames kept locally for reference/testing — never commit personal save data.
+/sample-saves/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

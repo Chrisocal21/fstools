@@ -127,6 +127,8 @@ export type SaveData = {
   mods: ModEntry[]
   files: SaveFileRecord[]
   ownedFarmlandByFarm: Record<number, number>
+  /** Average sell price per 1000L across the save's twelve seasonal periods, keyed by titleCased fillType. */
+  cropPrices: Record<string, number>
 }
 
 /**
@@ -168,4 +170,36 @@ export function formatMoney(value: number): string {
 export function formatPercent(ratio: number | null): string {
   if (ratio === null || Number.isNaN(ratio)) return '—'
   return `${Math.round(ratio * 100)}%`
+}
+
+export type CropValueEntry = {
+  fruitType: string
+  /** Average price across the save's twelve seasonal periods — see economy.xml notes in FARMSIM_SAVE_REFERENCE.md. */
+  price: number
+  fieldIds: number[]
+  /** Sum of the group's known field areas, or null if fields.xml carried none. Field hectares are map-defined, not save data, so real saves commonly have no area at all — this ranks by price alone rather than area × price. */
+  areaHa: number | null
+}
+
+/**
+ * Groups fields by crop and ranks by that crop's current market price —
+ * "which crops on this farm are worth the most", not an earnings forecast.
+ * Grouped rather than per-field because most saves have many fields sharing
+ * a crop, which would otherwise repeat the same price down a long list.
+ */
+export function cropValueRanking(
+  fields: { id: number; fruitType: string; areaHa: number | null }[],
+  cropPrices: Record<string, number>,
+): CropValueEntry[] {
+  const byCrop = new Map<string, { fieldIds: number[]; areaHa: number | null }>()
+  for (const field of fields) {
+    if (!field.fruitType || !(field.fruitType in cropPrices)) continue
+    const entry = byCrop.get(field.fruitType) ?? { fieldIds: [], areaHa: null }
+    entry.fieldIds.push(field.id)
+    if (field.areaHa !== null) entry.areaHa = (entry.areaHa ?? 0) + field.areaHa
+    byCrop.set(field.fruitType, entry)
+  }
+  return Array.from(byCrop.entries())
+    .map(([fruitType, entry]) => ({ fruitType, price: cropPrices[fruitType], ...entry }))
+    .sort((a, b) => b.price - a.price)
 }

@@ -3,9 +3,11 @@
 // Rules are scripted, not AI, and each one states its reasoning in `detail`.
 
 import {
+  cropValueRanking,
   formatMoney,
   growthLabel,
   isHarvestReady,
+  type CropValueEntry,
   type Farm,
   type Field,
   type FillSlot,
@@ -441,6 +443,8 @@ export type FieldRollup = {
   areaHa: number | null
   readyToHarvest: Field[]
   needsAttention: number
+  /** Crops grown on this farm ranked by current market price, highest first — see cropValueRanking. */
+  topValue: CropValueEntry[]
   insights: Insight[]
 }
 
@@ -448,12 +452,15 @@ export function fieldRollup(
   fields: Field[],
   scales: FieldScales,
   irrigation: boolean,
+  cropPrices: Record<string, number>,
 ): FieldRollup {
   const areaValues = fields.map((f) => f.areaHa).filter((a): a is number => a !== null)
   const readyToHarvest = fields.filter(isHarvestReady)
   const needsAttention = fields.filter(
     (f) => worstSeverity(fieldInsights(f, scales, { irrigation })) !== 'good',
   ).length
+
+  const topValue = cropValueRanking(fields, cropPrices).slice(0, 5)
 
   const insights: Insight[] = []
   if (readyToHarvest.length > 0) {
@@ -493,6 +500,7 @@ export function fieldRollup(
     areaHa: areaValues.length > 0 ? areaValues.reduce((s, a) => s + a, 0) : null,
     readyToHarvest,
     needsAttention,
+    topValue,
     insights,
   }
 }
@@ -563,7 +571,7 @@ export function buildReport(save: SaveData, farmId: number): Report | null {
 
   const finance = financeRollup(farm, save.finances)
   const fleet = fleetRollup(vehicles)
-  const fieldStats = fieldRollup(fields, scales, irrigation)
+  const fieldStats = fieldRollup(fields, scales, irrigation, save.cropPrices)
   const productionStats = productionRollup(production)
 
   const priorities = [

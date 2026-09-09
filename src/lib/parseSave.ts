@@ -30,6 +30,7 @@ const PARSED_FILES = new Set([
   'vehicles.xml',
   'placeables.xml',
   'environment.xml',
+  'economy.xml',
 ])
 
 /** Files we knowingly carry through untouched — engine/world state. */
@@ -39,7 +40,6 @@ const PASSTHROUGH_PATTERNS = [
   /^weed_/i,
   /^snow_/i,
   /^tree(plant|marker)/i,
-  /^economy\.xml$/i,
   /^missions\.xml$/i,
   /^terrain/i,
 ]
@@ -376,6 +376,28 @@ function parseMods(doc: Document): ModEntry[] {
   }))
 }
 
+/**
+ * economy.xml carries one <fillType> per fill type, each with a <history> of
+ * twelve seasonal <period> prices. There is no "current price" — the save
+ * doesn't record which period is active — so this averages the year rather
+ * than guessing. A few fill types (observed: TEA_WINTERFRUITS) carry a
+ * negative glitch value in one or two periods; those are dropped rather than
+ * dragging the average down.
+ */
+function parseEconomy(doc: Document): Record<string, number> {
+  const prices: Record<string, number> = {}
+  for (const el of Array.from(doc.querySelectorAll('fillTypes > fillType'))) {
+    const name = el.getAttribute('fillType')
+    if (!name || name === 'UNKNOWN') continue
+    const values = Array.from(el.querySelectorAll('history > period'))
+      .map((p) => num(p.textContent))
+      .filter((v) => v > 0)
+    if (values.length === 0) continue
+    prices[titleCase(name)] = values.reduce((sum, v) => sum + v, 0) / values.length
+  }
+  return prices
+}
+
 function parseFarmland(doc: Document): Record<number, number> {
   const owned: Record<number, number> = {}
   for (const el of Array.from(doc.querySelectorAll('farmland'))) {
@@ -411,6 +433,7 @@ export async function parseSaveFiles(files: File[]): Promise<ParsedUpload> {
     mods: [],
     files: [],
     ownedFarmlandByFarm: {},
+    cropPrices: {},
   }
 
   for (const file of files) {
@@ -479,6 +502,9 @@ export async function parseSaveFiles(files: File[]): Promise<ParsedUpload> {
         break
       case 'environment.xml':
         save.currentDay = num(attrOrChild(doc.documentElement, 'currentDay'))
+        break
+      case 'economy.xml':
+        save.cropPrices = parseEconomy(doc)
         break
     }
 

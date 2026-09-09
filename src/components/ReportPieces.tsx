@@ -1,6 +1,13 @@
 // Shared building blocks for the report's drill-down views.
 import type { ReactNode } from 'react'
-import { formatPercent, type FillSlot, type Insight, type Severity } from '../lib/saveModel'
+import {
+  formatMoney,
+  formatPercent,
+  type FillSlot,
+  type FinanceDay,
+  type Insight,
+  type Severity,
+} from '../lib/saveModel'
 
 const SEVERITY_TEXT: Record<Severity, string> = {
   good: 'text-status-safe',
@@ -162,6 +169,74 @@ export function DrillRow({
         {children}
       </div>
     </details>
+  )
+}
+
+/**
+ * Net per day, oldest to newest — the save stores day 0 as most recent, so
+ * this reverses that for a left-to-right reading. Bars sit above or below a
+ * zero baseline, which carries the profit/loss signal on its own — color
+ * only reinforces it, since green/rust alone isn't a safe distinction for
+ * every reader.
+ */
+export function TrendChart({ days }: { days: FinanceDay[] }) {
+  if (days.length === 0) return null
+  const chronological = [...days].reverse()
+  const maxAbs = Math.max(1, ...chronological.map((d) => Math.abs(d.net)))
+
+  const barSlot = 40
+  const barWidth = 22
+  const height = 140
+  const baselineY = height / 2
+  const width = chronological.length * barSlot
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          width={width}
+          height={height}
+          className="block"
+          role="img"
+          aria-label="Net income per day, oldest to newest"
+        >
+          <line x1={0} y1={baselineY} x2={width} y2={baselineY} className="stroke-tan" strokeWidth={1} />
+          {chronological.map((d, i) => {
+            const barHeight = (Math.abs(d.net) / maxAbs) * (baselineY - 10)
+            const x = i * barSlot + (barSlot - barWidth) / 2
+            const y = d.net >= 0 ? baselineY - barHeight : baselineY
+            return (
+              <rect
+                key={d.day}
+                x={x}
+                y={y}
+                width={barWidth}
+                height={Math.max(barHeight, 1)}
+                rx={3}
+                className={d.net >= 0 ? 'fill-status-safe' : 'fill-status-risky'}
+              >
+                <title>{`Day ${d.day}: ${formatMoney(d.net)}`}</title>
+              </rect>
+            )
+          })}
+        </svg>
+      </div>
+      <div className="mt-1 flex items-center justify-between text-xs text-ink/50">
+        <span>Day {chronological[0].day} (oldest)</span>
+        <span className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-full bg-status-safe" aria-hidden="true" />
+            Profit day
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-full bg-status-risky" aria-hidden="true" />
+            Loss day
+          </span>
+        </span>
+        <span>Day {chronological[chronological.length - 1].day} (most recent)</span>
+      </div>
+    </div>
   )
 }
 

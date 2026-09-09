@@ -58,9 +58,9 @@
 - [x] **Rollups** — fleet value by category, idle capital total, repair backlog, fields needing work, active vs. total lines
 
 #### Next on the report (before the map)
-- [ ] Profit per field — join `economy.xml` crop prices to field area and growth to rank fields by what they actually earn
-- [ ] Cost per vehicle — attribute `vehicleRunningCost`, fuel and repair spend back to individual machines
-- [ ] Trend lines — day-over-day net, not just totals, so a decline is visible before it hurts
+- [x] Profit per field — `economy.xml` is now parsed (average price per fill type across the twelve seasonal periods). Verified against the real sample save that field area is **not** in `fields.xml` at all (it's map-defined, not save data), so the original "area × price" plan was dropped in favor of a "most valuable crops on this farm" ranking in the Fields tab — crops grouped and ranked by season-average price, field count shown per crop, area folded in only when a save happens to carry it. Confirmed end-to-end in a real browser against the sample save (68 fields, 15 distinct crops, all matched to a price).
+- [x] ~~Cost per vehicle~~ — checked against the real sample save: `vehicleRunningCost`, fuel and repair spend are only ever farm-wide daily totals in `farms.xml`. No file anywhere (`vehicles.xml` included, checked every nested element) attributes cost, fuel use, or repair spend to an individual `uniqueId` — the game doesn't track it per machine, so there's nothing to attribute back. Dropped rather than faked with a prorated guess.
+- [x] Trend lines — new `TrendChart` (`src/components/ReportPieces.tsx`) in the Finances tab: net per day as a bar chart, oldest to newest, bars above/below a zero baseline (position carries the profit/loss signal, color reinforces it), hover for the exact figure. Confirmed in a real browser against the sample save's 5-day window.
 - [ ] Production chain view — which building feeds which, and where the chain is starved
 - [ ] Report export (.txt / print stylesheet) alongside the mods list
 - [ ] Verify the tolerant parsers against a second real save (multi-farm, different map, different mods)
