@@ -324,7 +324,11 @@ export function applyChanges(
         Array.from(pp.querySelectorAll('production')).forEach((prodEl, i) => {
           const line = point.lines[i]
           if (!line || line.active === source.lines[i]?.active) return
-          if (prodEl.hasAttribute('active')) prodEl.setAttribute('active', String(line.active))
+          // Mirror the reader's own priority (parseSave.ts) so a toggle always lands on
+          // whichever attribute the game will actually read back — real saves only ever
+          // carry `isEnabled`, but tolerate the older `active`/`status` shapes too.
+          if (prodEl.hasAttribute('isEnabled')) prodEl.setAttribute('isEnabled', String(line.active))
+          else if (prodEl.hasAttribute('active')) prodEl.setAttribute('active', String(line.active))
           else prodEl.setAttribute('status', line.active ? '1' : '0')
         })
         fillSlotElements(pp, STORAGE_SELECTOR).forEach((slotEl, i) => {

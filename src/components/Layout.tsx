@@ -9,7 +9,7 @@ const NAV_LINKS = [
 export default function Layout() {
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="bg-charcoal">
+      <header className="bg-charcoal print:hidden">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link
             to="/"
@@ -40,7 +40,7 @@ export default function Layout() {
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12">
         <Outlet />
       </main>
-      <footer className="border-t border-tan">
+      <footer className="border-t border-tan print:hidden">
         <div className="mx-auto max-w-5xl px-6 py-6 text-xs text-ink/50">
           Built for the fields of Farming Simulator. Nothing leaves your browser.
         </div>

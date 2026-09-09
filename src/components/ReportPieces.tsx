@@ -1,5 +1,6 @@
 // Shared building blocks for the report's drill-down views.
 import type { ReactNode } from 'react'
+import { chainStatusReason } from '../lib/insights'
 import {
   formatMoney,
   formatPercent,
@@ -269,17 +270,20 @@ export function ProductionChainView({ links }: { links: ProductionChainLink[] })
         const producerNames = [...new Set(link.producers.map((p) => p.pointName))]
         const consumerNames = [...new Set(link.consumers.map((c) => `${c.pointName} · ${c.lineName}`))]
         return (
-          <li key={link.fillType} className="flex flex-wrap items-center gap-3 py-3 text-sm">
-            <span className={`shrink-0 text-xs font-medium uppercase tracking-wide ${style.text}`}>
-              {style.label}
-            </span>
-            <span className="min-w-0 flex-1 text-ink/80">
-              <span className="text-ink">{producerNames.join(', ')}</span>
-              <span className="mx-2 text-ink/40">&rarr;</span>
-              <span className="font-medium text-ink">{link.fillType}</span>
-              <span className="mx-2 text-ink/40">&rarr;</span>
-              <span className="text-ink">{consumerNames.join(', ')}</span>
-            </span>
+          <li key={link.fillType} className="py-3 text-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`shrink-0 text-xs font-medium uppercase tracking-wide ${style.text}`}>
+                {style.label}
+              </span>
+              <span className="min-w-0 flex-1 text-ink/80">
+                <span className="text-ink">{producerNames.join(', ')}</span>
+                <span className="mx-2 text-ink/40">&rarr;</span>
+                <span className="font-medium text-ink">{link.fillType}</span>
+                <span className="mx-2 text-ink/40">&rarr;</span>
+                <span className="text-ink">{consumerNames.join(', ')}</span>
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-ink/50">{chainStatusReason(link)}</p>
           </li>
         )
       })}

@@ -16,6 +16,7 @@ import {
   type Insight,
   type ProductionChainLink,
   type ProductionChainNode,
+  type ProductionLine,
   type ProductionPoint,
   type SaveData,
   type Severity,
@@ -292,6 +293,25 @@ export function productionInsights(point: ProductionPoint): Insight[] {
   return out
 }
 
+/**
+ * Why one specific line is (or isn't) running, in plain terms with a next
+ * step attached — reuses the same input/output levels the Lines panel
+ * already shows, so the line's status is never just a bare label with
+ * nothing behind it.
+ */
+export function lineStatusReason(line: ProductionLine): string {
+  if (line.active) return 'Running normally.'
+  const starvedInput = line.inputs.find((s) => s.fillLevel <= 0)
+  if (starvedInput) {
+    return `Off — there's no ${starvedInput.fillType.toLowerCase()} in storage for it to use. Bring some in and it can start.`
+  }
+  const fullOutput = line.outputs.find((s) => s.ratio !== null && s.ratio >= 0.9)
+  if (fullOutput) {
+    return `Off — its ${fullOutput.fillType.toLowerCase()} storage is nearly full. Sell some to free up room, then switch it back on.`
+  }
+  return "Off by choice — nothing is stopping it, you can switch it back on any time."
+}
+
 // --- finances ----------------------------------------------------------
 
 function sumByKey(days: FinanceDay[]): Map<string, { label: string; total: number }> {
@@ -345,10 +365,18 @@ export function financeRollup(farm: Farm, finances: FinanceDay[]): FinanceRollup
 
     const biggestCost = byCategory.find((c) => c.total < 0)
     if (biggestCost && income > 0 && Math.abs(biggestCost.total) / income > 0.25) {
+      const ratio = Math.abs(biggestCost.total) / income
+      // A one-off expense (buying land, a mission payout gone wrong) can dwarf
+      // a small income window many times over — "13528%" reads as broken even
+      // though the arithmetic is right, so switch to a multiple past 3x.
+      const scale =
+        ratio >= 3
+          ? `${ratio.toFixed(1)}x everything you earned in this window`
+          : `${Math.round(ratio * 100)}% of everything you earned in this window`
       insights.push({
         severity: 'attention',
         title: `${biggestCost.label} is your biggest drain`,
-        detail: `${formatMoney(Math.abs(biggestCost.total))} — ${Math.round((Math.abs(biggestCost.total) / income) * 100)}% of everything you earned in this window. Worth attacking first.`,
+        detail: `${formatMoney(Math.abs(biggestCost.total))} — ${scale}. Worth attacking first.`,
       })
     }
   }
@@ -615,24 +643,43 @@ export function productionChains(points: ProductionPoint[]): ProductionChainLink
   return links.sort((a, b) => CHAIN_STATUS_ORDER[a.status] - CHAIN_STATUS_ORDER[b.status])
 }
 
+/**
+ * The one-line "why" behind a chain link's status — shown both inline on the
+ * chain row and as the detail text of its aggregate insight, so the two never
+ * disagree with each other.
+ */
+export function chainStatusReason(link: ProductionChainLink): string {
+  const producerNames = [...new Set(link.producers.map((p) => p.pointName))]
+  const activeProducerNames = [...new Set(link.producers.filter((p) => p.active).map((p) => p.pointName))]
+  const consumerNames = [...new Set(link.consumers.map((c) => c.lineName))]
+  const activeConsumerNames = [...new Set(link.consumers.filter((c) => c.active).map((c) => c.lineName))]
+
+  switch (link.status) {
+    case 'starved':
+      return `${activeConsumerNames.join(', ')} need${activeConsumerNames.length === 1 ? 's' : ''} ${link.fillType.toLowerCase()}, but ${producerNames.join(', ')} ${producerNames.length === 1 ? 'is' : 'are'} not producing any right now.`
+    case 'unused':
+      return `${activeProducerNames.join(', ')} ${activeProducerNames.length === 1 ? 'is' : 'are'} producing ${link.fillType.toLowerCase()}, but ${consumerNames.join(', ')} ${consumerNames.length === 1 ? 'is' : 'are'} switched off.`
+    case 'idle':
+      return `Neither side is running — the whole ${link.fillType.toLowerCase()} chain is switched off right now.`
+    case 'flowing':
+      return `${producerNames.join(', ')} ${producerNames.length === 1 ? 'is' : 'are'} actively feeding ${consumerNames.join(', ')}.`
+  }
+}
+
 export function productionChainInsights(links: ProductionChainLink[]): Insight[] {
   const out: Insight[] = []
   for (const link of links) {
     if (link.status === 'starved') {
-      const consumerNames = [...new Set(link.consumers.filter((c) => c.active).map((c) => c.lineName))]
-      const producerNames = [...new Set(link.producers.map((p) => p.pointName))]
       out.push({
         severity: 'risky',
         title: `${link.fillType} chain is starved`,
-        detail: `${consumerNames.join(', ')} need${consumerNames.length === 1 ? 's' : ''} ${link.fillType.toLowerCase()}, but ${producerNames.join(', ')} ${producerNames.length === 1 ? 'is' : 'are'} not making any right now. Switch the producing line back on or the consumer stalls next.`,
+        detail: `${chainStatusReason(link)} Switch the producing line back on or the consumer stalls next.`,
       })
     } else if (link.status === 'unused') {
-      const producerNames = [...new Set(link.producers.filter((p) => p.active).map((p) => p.pointName))]
-      const consumerNames = [...new Set(link.consumers.map((c) => c.lineName))]
       out.push({
         severity: 'attention',
         title: `${link.fillType} has nowhere to go`,
-        detail: `${producerNames.join(', ')} ${producerNames.length === 1 ? 'is' : 'are'} making ${link.fillType.toLowerCase()}, but ${consumerNames.join(', ')} ${consumerNames.length === 1 ? 'is' : 'are'} switched off. Turn the consumer on or this output is going to waste.`,
+        detail: `${chainStatusReason(link)} Turn the consumer on or this output is going to waste.`,
       })
     }
   }
@@ -703,4 +750,106 @@ export function buildReport(save: SaveData, farmId: number): Report | null {
     productionChainInsights: chainInsights,
     priorities,
   }
+}
+
+// --- plain-text export ---------------------------------------------------
+
+function txtSection(title: string, lines: (string | null)[]): string[] {
+  return [title, ...lines.filter((l): l is string => l !== null), '']
+}
+
+function txtInsights(insights: Insight[]): string[] {
+  return insights
+    .filter((i) => i.severity !== 'good')
+    .map((i) => `- ${i.title}: ${i.detail}`)
+}
+
+/**
+ * A plain-text mirror of the report tabs — same numbers, same plain-English
+ * notes, no formatting a text editor can't render. Not every field or
+ * vehicle is listed line by line (68 fields would swamp the file); this
+ * gives the same "what to do next" summary you'd get on screen.
+ */
+export function buildReportTxt(save: SaveData, report: Report): string {
+  const lines: string[] = []
+  lines.push(`FarmSim Tools — Farm Report`)
+  lines.push(
+    [report.farm.name, save.mapTitle, save.savegameName].filter(Boolean).join(' · '),
+  )
+  lines.push(
+    `Day ${save.currentDay} · ${Math.round(save.playtimeHours)}h played · generated ${new Date().toLocaleDateString()}`,
+  )
+  lines.push('')
+
+  if (report.priorities.length > 0) {
+    lines.push(
+      ...txtSection(
+        'WHAT TO DO NEXT',
+        report.priorities.map((i) => `- ${i.title}: ${i.detail}`),
+      ),
+    )
+  }
+
+  lines.push(
+    ...txtSection('OVERVIEW', [
+      `Cash: ${formatMoney(report.farm.money)}${report.farm.loan > 0 ? ` (${formatMoney(report.farm.loan)} loan outstanding)` : ' (no loan)'}`,
+      `Fleet: ${report.fleet.count} machines worth ${formatMoney(report.fleet.value)}, ${report.fleet.needingRepair.length} needing repair`,
+      `Fields: ${report.fieldStats.count} fields${report.fieldStats.areaHa ? ` (${report.fieldStats.areaHa.toFixed(0)} ha)` : ''}, ${report.fieldStats.needsAttention} needing work`,
+      `Production: ${report.productionStats.activeLines}/${report.productionStats.totalLines} lines running across ${report.productionStats.count} buildings`,
+    ]),
+  )
+
+  lines.push(
+    ...txtSection('FINANCES', [
+      report.finance.days > 0
+        ? `Last ${report.finance.days} days — income ${formatMoney(report.finance.income)}, expenses ${formatMoney(report.finance.expenses)}, net ${formatMoney(report.finance.net)} (avg ${formatMoney(report.finance.averageNet)}/day)`
+        : 'No day-by-day finance history in this save.',
+      ...report.finance.byCategory
+        .slice(0, 5)
+        .map((c) => `  ${c.label}: ${formatMoney(c.total)}`),
+      ...txtInsights(report.finance.insights),
+    ]),
+  )
+
+  lines.push(
+    ...txtSection('FLEET', [
+      ...report.fleet.byCategory.map(
+        (c) => `  ${c.category}: ${c.count} machine${c.count === 1 ? '' : 's'}, ${formatMoney(c.value)}`,
+      ),
+      report.fleet.needingRepair.length > 0
+        ? `Needs repair: ${report.fleet.needingRepair.map((v) => v.name).join(', ')}`
+        : null,
+      ...txtInsights(report.fleet.insights),
+    ]),
+  )
+
+  lines.push(
+    ...txtSection('FIELDS', [
+      report.fieldStats.readyToHarvest.length > 0
+        ? `Ready to harvest: field ${report.fieldStats.readyToHarvest.map((f) => f.id).join(', ')}`
+        : null,
+      ...report.fieldStats.topValue
+        .slice(0, 5)
+        .map((c) => `  ${c.fruitType}: ${c.price.toFixed(0)} avg, ${c.fieldIds.length} field${c.fieldIds.length === 1 ? '' : 's'}`),
+      ...txtInsights(report.fieldStats.insights),
+    ]),
+  )
+
+  lines.push(
+    ...txtSection('PRODUCTION', [
+      ...txtInsights(report.productionStats.insights),
+      ...txtInsights(report.productionChainInsights),
+    ]),
+  )
+
+  if (save.mods.length > 0) {
+    lines.push(
+      ...txtSection(
+        `MODS (${save.mods.length})`,
+        save.mods.map((m) => `- ${m.title}${m.version ? ` (v${m.version})` : ''}`),
+      ),
+    )
+  }
+
+  return lines.join('\n').trimEnd() + '\n'
 }

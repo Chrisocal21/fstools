@@ -8,14 +8,17 @@ import {
   MeterBar,
   Panel,
   ProductionChainView,
-  SeverityTag,
+  SeverityDot,
   StatGrid,
   TrendChart,
 } from '../components/ReportPieces'
 import {
   buildReport,
+  buildReportTxt,
   fieldInsights,
+  lineStatusReason,
   productionInsights,
+  type Report,
   vehicleInsights,
   worstSeverity,
 } from '../lib/insights'
@@ -54,14 +57,22 @@ function Section({
   )
 }
 
-function downloadModsTxt(save: SaveData) {
-  const blob = new Blob([buildModsTxt(save)], { type: 'text/plain;charset=utf-8' })
+function downloadTextFile(text: string, filename: string) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${save.savegameName || 'farmsim'}-mods.txt`
+  link.download = filename
   link.click()
   URL.revokeObjectURL(url)
+}
+
+function downloadModsTxt(save: SaveData) {
+  downloadTextFile(buildModsTxt(save), `${save.savegameName || 'farmsim'}-mods.txt`)
+}
+
+function downloadReportTxt(save: SaveData, report: Report) {
+  downloadTextFile(buildReportTxt(save, report), `${save.savegameName || 'farmsim'}-report.txt`)
 }
 
 const FILE_STATUS_LABEL: Record<SaveFileStatus, string> = {
@@ -155,21 +166,21 @@ export default function Report() {
   return (
     <div>
       <h1 className="font-display text-3xl font-semibold text-ink">Report</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink/70">
+      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink/70 print:hidden">
         Upload your savegame files to generate a read-only breakdown of your farm's
         finances, fleet, fields and production — with a plain-English note on every
         machine, field and production line telling you what could be better.
       </p>
 
       {save ? (
-        <details className="mt-6">
+        <details className="mt-6 print:hidden">
           <summary className="inline-flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-forest underline decoration-forest/30 underline-offset-4">
             {save.savegameName || 'Save loaded'} · {save.files.length} files — change or add files
           </summary>
           <div className="mt-4">{uploader}</div>
         </details>
       ) : (
-        <div className="mt-8">{uploader}</div>
+        <div className="mt-8 print:hidden">{uploader}</div>
       )}
 
       {save && !report && (
@@ -181,8 +192,13 @@ export default function Report() {
 
       {save && report && (
         <div className="mt-10 space-y-6">
+          <p className="hidden print:block print:text-sm print:text-ink/70">
+            {report.farm.name}
+            {save.mapTitle ? ` · ${save.mapTitle}` : ''} — Day {save.currentDay}
+          </p>
+
           {save.farms.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-field border border-tan bg-white/60 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 rounded-field border border-tan bg-white/60 px-4 py-3 print:hidden">
               <span className="mr-2 text-xs uppercase tracking-wide text-ink/50">
                 {save.farms.length} farms in this save
               </span>
@@ -203,7 +219,24 @@ export default function Report() {
             </div>
           )}
 
-          <div className="flex flex-wrap gap-1 rounded-field border border-tan bg-white/60 p-1">
+          <div className="flex flex-wrap items-center gap-3 print:hidden">
+            <button
+              type="button"
+              onClick={() => downloadReportTxt(save, report)}
+              className="text-sm font-medium text-forest underline decoration-forest/30 underline-offset-4 transition-colors hover:text-forest-light"
+            >
+              Download full report (.txt) &rarr;
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="text-sm font-medium text-forest underline decoration-forest/30 underline-offset-4 transition-colors hover:text-forest-light"
+            >
+              Print report &rarr;
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1 rounded-field border border-tan bg-white/60 p-1 print:hidden">
             {tabs.map((entry) => (
               <button
                 key={entry.id}
@@ -232,8 +265,7 @@ export default function Report() {
             ))}
           </div>
 
-          {tab === 'overview' && (
-            <>
+          <div className={tab === 'overview' ? '' : 'hidden print:block'}>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <KpiCard
                   label="Cash"
@@ -276,10 +308,9 @@ export default function Report() {
                   <InsightList insights={report.priorities} />
                 </Section>
               )}
-            </>
-          )}
+          </div>
 
-          {tab === 'finances' && (
+          <div className={tab === 'finances' ? '' : 'hidden print:block'}>
           <Section
             icon={<CoinIcon />}
             title="Finances"
@@ -402,9 +433,9 @@ export default function Report() {
               <InsightList insights={report.finance.insights} />
             </div>
           </Section>
-          )}
+          </div>
 
-          {tab === 'fleet' && (
+          <div className={tab === 'fleet' ? '' : 'hidden print:block'}>
           <Section
             icon={<TractorIcon />}
             title="Fleet"
@@ -493,9 +524,9 @@ export default function Report() {
               <InsightList insights={report.fleet.insights} />
             </div>
           </Section>
-          )}
+          </div>
 
-          {tab === 'fields' && (
+          <div className={tab === 'fields' ? '' : 'hidden print:block'}>
           <Section
             icon={<WheatIcon />}
             title="Fields"
@@ -601,9 +632,9 @@ export default function Report() {
               <InsightList insights={report.fieldStats.insights} />
             </div>
           </Section>
-          )}
+          </div>
 
-          {tab === 'production' && (
+          <div className={tab === 'production' ? '' : 'hidden print:block'}>
           <Section
             icon={<SiloIcon />}
             title="Production"
@@ -650,8 +681,16 @@ export default function Report() {
                             <li key={line.id}>
                               <div className="flex items-baseline justify-between">
                                 <span className="text-sm text-ink">{line.name}</span>
-                                <SeverityTag severity={line.active ? 'good' : 'attention'} />
+                                <span
+                                  className={`flex items-center gap-1.5 text-xs font-medium ${
+                                    line.active ? 'text-status-safe' : 'text-status-attention'
+                                  }`}
+                                >
+                                  <SeverityDot severity={line.active ? 'good' : 'attention'} />
+                                  {line.active ? 'Running' : 'Idle'}
+                                </span>
                               </div>
+                              <p className="mt-0.5 text-xs text-ink/50">{lineStatusReason(line)}</p>
                               {line.inputs.length > 0 && (
                                 <div className="mt-2">
                                   <FillSlots slots={line.inputs} emptyText="" />
@@ -681,9 +720,9 @@ export default function Report() {
               <InsightList insights={report.productionStats.insights} />
             </div>
           </Section>
-          )}
+          </div>
 
-          {tab === 'mods' && (
+          <div className={tab === 'mods' ? '' : 'hidden print:block'}>
           <Section
             icon={<WrenchIcon />}
             title="Mods & files"
@@ -737,7 +776,7 @@ export default function Report() {
               </p>
             </details>
           </Section>
-          )}
+          </div>
         </div>
       )}
 
@@ -745,7 +784,7 @@ export default function Report() {
         <p className="mt-10 text-sm text-ink/50">Upload a save above to see your report.</p>
       )}
 
-      <p className="mt-12 border-t border-tan pt-6 text-xs leading-relaxed text-ink/50">
+      <p className="mt-12 border-t border-tan pt-6 text-xs leading-relaxed text-ink/50 print:hidden">
         Privacy note: your save file is processed entirely in your browser. Nothing
         is uploaded to a server or stored anywhere — refreshing the page clears
         everything.
